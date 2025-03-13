@@ -15,10 +15,10 @@ def fetch_and_store():
     fetch_recent_tweets("#Bitcoin", max_tweets=10)
     return jsonify({"message": "Data fetched successfully"}), 200
 
-@api.route("/cryptos", methods=["GET"])
-def get_cryptos():
-    data = list(capstone_collection.find({}, {"_id": 0}))
-    return jsonify(data), 200
+# @api.route("/cryptos", methods=["GET"])
+# def get_cryptos():
+#     data = list(capstone_collection.find({}, {"_id": 0}))
+#     return jsonify(data), 200
 
 @api.route('/crypto_trends', methods=['GET'])
 def get_crypto_trends():
