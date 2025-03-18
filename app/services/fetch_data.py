@@ -12,10 +12,6 @@ twitter_api_secret_key = os.getenv('TWITTER_API_SECRET_KEY')
 twitter_bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
 client = tweepy.Client(bearer_token=twitter_bearer_token)
 
-#import the dataset
-file_path = "CryptocurrencyData.csv"
-df = pd.read_csv(file_path)
-
 
 capstone_collection = mongo_service.get_collection('crypto_trends')
 
@@ -76,34 +72,6 @@ def fetch_recent_tweets(keyword, max_tweets=10):
         print("❌ Rate Limit Exceeded. Retrying in 15 minutes...")
         time.sleep(900)  # ✅ Wait 15 minutes (900 seconds) before retrying
         return fetch_recent_tweets(keyword, max_tweets)
-
-def process_crypto_data():
-    processed_data = []
-    df.columns = df.columns.str.strip()
-    df.replace("-", "0", inplace=True)
-    for _, row in df.iterrows():
-        try:
-            # Convert 24h % change to float safely
-            trend_score = float(str(row["24h"]).strip('%')) / 100 if "%" in str(row["24h"]) else 0.0
-            
-            # Simulate sentiment (-1 to 1)
-            sentiment_score = random.uniform(-1, 1)
-
-            processed_data.append({
-                "name": row["Coin Name"],
-                "symbol": row["Symbol"],
-                "price": float(row["Price"].replace(",", "")) if row["Price"] != "0" else 0.0,  # ✅ Convert safely
-                # "sentiment_score": round(sentiment_score, 2),
-                "trend_score": round(trend_score, 2),
-                "market_cap": row["Market Cap"] if row["Market Cap"] != "0" else "Unknown",
-                "volume_24h": row["24h Volume"] if row["24h Volume"] != "0" else "Unknown",
-                "change_24h": row["24h"] if row["24h"] != "0" else "No Change"
-            })
-        except ValueError:
-            # print(f"Skipping invalid row: {row}")
-            continue
-        
-    return processed_data
 
 
 def insert_fetched_tweets(tweets):

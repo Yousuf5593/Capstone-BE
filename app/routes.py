@@ -1,11 +1,18 @@
 from flask import Blueprint, jsonify, request
+
 from app.models import mongo_service
-from app.services.fetch_data import fetch_recent_tweets, process_crypto_data
-from bson.objectid import ObjectId
+from app.services.fetch_data import fetch_recent_tweets
+from app.services.sentimental_analysis import process_sentiment_analysis
+from app.services.cache_service import get_cache_key, retrieve_from_cache, store_in_cache
 
 capstone_collection = mongo_service.get_collection('crypto_trends')
 
 api = Blueprint("api", __name__)
+
+# Initialize the app with cache and register the blueprint
+def init_app(app, cache):
+    api.cache = cache
+    app.register_blueprint(api, url_prefix="/api")
 
 @api.route("/fetch", methods=["GET"])
 def fetch_and_store():
@@ -19,14 +26,6 @@ def fetch_and_store():
 # def get_cryptos():
 #     data = list(capstone_collection.find({}, {"_id": 0}))
 #     return jsonify(data), 200
-
-@api.route('/crypto_trends', methods=['GET'])
-def get_crypto_trends():
-    """
-    Retrieve processed cryptocurrency trends data from the dataset.
-    """
-    data = process_crypto_data()
-    return jsonify({"cryptos": data})
 
 
 @api.route('/admin/update_mock_data', methods=['POST'])
@@ -78,3 +77,19 @@ def get_mock_data():
 
     return jsonify(filtered_data), 200
 
+@api.route("/sentiment_analysis", methods=["GET"])
+def sentiment_analysis():
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    check_cache = request.args.get('check_cache', 'false').lower() == 'true'
+    cache_key = get_cache_key(start_date, end_date)
+
+    # if check_cache:
+    cached_data = retrieve_from_cache(api.cache, cache_key)
+    if cached_data:
+        print("Returning data from cache.")
+        return jsonify(cached_data)
+    response = process_sentiment_analysis(start_date, end_date)
+
+    store_in_cache(api.cache, cache_key, response)
+    return jsonify(response)
