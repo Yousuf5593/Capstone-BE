@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from app.models import mongo_service
+from app.services.db_service import mongo_service
 from app.services.fetch_data import fetch_recent_tweets
 from app.services.sentimental_analysis import process_sentiment_analysis
 from app.services.cache_service import get_cache_key, retrieve_from_cache, store_in_cache

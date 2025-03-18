@@ -1,8 +1,8 @@
 import pandas as pd
 import random
-from textblob import TextBlob
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-
+analyzer = SentimentIntensityAnalyzer()
 # Load the dataset
 file_path = "crypto_dataset.csv"
 df = pd.read_csv(file_path)
@@ -50,9 +50,23 @@ def detect_crypto(hashtags):
             return coin
     return None
 
-# Perform Sentiment Analysis
 def get_sentiment_score(text):
-    return TextBlob(str(text)).sentiment.polarity
+    # Initialize VADER SentimentIntensityAnalyzer
+    analyzer = SentimentIntensityAnalyzer()
+    
+    # Get sentiment polarity scores
+    sentiment = analyzer.polarity_scores(text)
+    
+    # Extract the compound score as the overall sentiment score
+    score = sentiment['compound']
+    
+    # Return the sentiment score based on compound
+    if score > 0.1:
+        return 1  # Positive sentiment
+    elif score < -0.1:
+        return -1  # Negative sentiment
+    else:
+        return 0  # Neutral sentiment
 
 def categorize_sentiment(score):
     if score > 0.1:
