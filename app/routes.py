@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from app.services.fetch_user_tweets import fetch_user_tweets
 from app.services.db_service import mongo_service
 from app.services.fetch_data import fetch_recent_tweets
-from app.services.sentimental_analysis import process_coins_sentiment_analysis, get_sentiment_summary_for_range
+from app.services.sentimental_analysis import process_coins_sentiment_analysis, get_sentiment_summary_for_range, process_tweet_data
 from app.services.cache_service import get_cache_key, retrieve_from_cache, store_in_cache
 from app.services.helper import compare_coin_mentions
 from datetime import date
@@ -21,8 +21,8 @@ def fetch_and_store():
     """
     Fetch recent tweets with #Bitcoin (static for now)
     """
-    fetch_recent_tweets("Bitcoin", max_tweets=10)
-    return jsonify({"message": "Data fetched successfully"}), 200
+    response = fetch_recent_tweets("Tether", max_tweets=10)
+    return jsonify({"message": "Data fetched successfully", 'response': response}), 200
 
 
 @api.route('/admin/get_mock_data', methods=['GET'])
@@ -65,28 +65,21 @@ def sentiment_analysis():
     store_in_cache(api.cache, cache_key, response)
     return jsonify(response)
 
-@api.route('/tweets', methods=['POST'])
+@api.route('/tweets', methods=['GET'])
 def get_filtered_tweets():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     check_cache = request.args.get('check_cache', 'true').lower() == 'true'
     cache_key = get_cache_key(start_date, end_date)
-
-    data = request.get_json(force=True)
-    coins = data.get("coins")
     tweets_data = []
-
-    print("key: ", cache_key)
 
     if check_cache:
         cached_data = retrieve_from_cache(api.cache, cache_key)
         if cached_data:
             print("Returning data from cache.")
             tweets_data = cached_data
-            print("tweets_data: ", cached_data)
-            print("tweets_data: ", type(tweets_data))
 
-    response = fetch_user_tweets(start_date, end_date, coins, tweets_data)
+    response = fetch_user_tweets(start_date, end_date, tweets_data)
     store_in_cache(api.cache, cache_key, response)
     
     return jsonify(response)
@@ -98,6 +91,7 @@ def compare_sentiment():
     date_range1 = request.args.get("date_range1")
     date_range2 = request.args.get("date_range2")
     popularity_filter =  request.args.get("popularity_filter", "sentiment_count")
+        
     range1_summary = get_sentiment_summary_for_range(date_range1, popularity_filter)
     range2_summary = get_sentiment_summary_for_range(date_range2, popularity_filter)
 
@@ -107,3 +101,8 @@ def compare_sentiment():
         "range1": {"sentiment_summary": range1_enhanced},
         "range2": {"sentiment_summary": range2_enhanced}
     }
+
+@api.route("/live-tweets-sentiments", methods=["GET"])
+def live_data():
+    response = process_tweet_data()
+    return jsonify(response)

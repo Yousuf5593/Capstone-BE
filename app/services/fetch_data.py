@@ -15,29 +15,32 @@ twitter_api_secret_key = os.getenv('TWITTER_API_SECRET_KEY')
 twitter_bearer_token = os.getenv("TWITTER_BEARER_TOKEN")
 client = tweepy.Client(bearer_token=twitter_bearer_token)
 
-
 capstone_collection = mongo_service.get_collection('crypto_trends')
-positive_count = neutral_count = negative_count = 0
 
-def get_sentiment_score(text):
-    sentiment = analyzer.polarity_scores(text)
-    return sentiment['compound']
-
-
-def categorize_sentiment(score):
-    global positive_count, neutral_count, negative_count
-
-    if score >= 0.05:
-        positive_count += 1
-        return "Positive"
-    elif score <= -0.05:
-        negative_count += 1
-        return "Negative"
+def update_tweet_json_file(tweets, keyword, filename="tweets.json"):
+    print("Tweets Data: ", tweets.data)
+    # Step 1: Load existing data if the file exists
+    if os.path.exists(filename):
+        with open(filename, "r", encoding="utf-8") as f:
+            data = json.load(f)
     else:
-        negative_count += 1
-        return "Neutral"
+        data = {}
 
-def fetch_recent_tweets(keyword, max_tweets=10):
+    # Step 2: Extract tweet texts from tweets.data
+    new_texts = [tweet.text.strip() for tweet in tweets.data]
+
+    # Step 3: Update or create the keyword entry
+    if keyword.lower() in data:
+        data[keyword.lower()].extend(new_texts)
+    else:
+        data[keyword.lower()] = new_texts
+
+    # Step 4: Write back to JSON
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def fetch_recent_tweets(keyword, max_tweets=40):
     """
     Fetch recent tweets using Tweepy and store them in the MongoDB database.
     Ensures that fetched tweets are appended to `twitter_data` in the existing document.
@@ -45,86 +48,18 @@ def fetch_recent_tweets(keyword, max_tweets=10):
     max_tweets = max(10, min(max_tweets, 100))  # ✅ Ensure it's between 10 and 100
     query = f"{keyword} -is:retweet lang:en"
 
+    print(f"Extracting tweets for {keyword} coin")
+
     try:
-        tweets = client.search_recent_tweets(query=query, max_results=max_tweets, tweet_fields=["created_at"])
-
+        tweets = client.search_recent_tweets(query=query, max_results=max_tweets, tweet_fields=["created_at", "text"])
         if tweets.data:
-            sentiments = []
-
-            # with open("tweitter_data.json", "w", encoding="utf-8") as f:
-            #     json.dump(tweets.data , f, indent=4, ensure_ascii=False)
-            for tweet in tweets.data:
-                sentiment_score = get_sentiment_score(tweet.text)  # Range: -1 (negative) to +1 (positive)
-                sentiments.append(sentiment_score)
-
-                
-            avg_sentiment_score = sum(sentiments) / len(sentiments) if sentiments else 0
-            sentiment_label = categorize_sentiment(avg_sentiment_score)
-
-            print("sentiment_label: ", sentiment_label)
-
-            response = {
-                "crypto": keyword,
-                "avg_sentiment_score": round(avg_sentiment_score, 2),
-                "final_sentiment": sentiment_label,
-                "positive_count": positive_count,
-                "neutral_count": neutral_count,
-                "negative_count": negative_count,
-            }
-            return response
-
-            
+            update_tweet_json_file(tweets, keyword)
 
         else:
             print("No tweets found for the given keyword.")
+            return []
 
     except tweepy.errors.TooManyRequests:
         print("❌ Rate Limit Exceeded. Retrying in 15 minutes...")
         time.sleep(900)  # ✅ Wait 15 minutes (900 seconds) before retrying
         return fetch_recent_tweets(keyword, max_tweets)
-
-
-def insert_fetched_tweets(tweets):
-    """
-    Inserts or updates fetched tweets into the twitter_data array in MongoDB.
-    """
-    if not tweets:
-        return {"error": "No tweets to insert"}
-
-    existing_document = capstone_collection.find_one({})  # Get the first document
-
-    # Prepare tweet data for insertion
-    formatted_tweets = [
-        {
-            "tweet_id": tweet.id,
-            "text": tweet.text,
-            "created_at": tweet.created_at.isoformat(),
-            "user": {
-                "id": tweet.author_id,
-                "username": tweet.author_id,  # Adjust this if fetching user details
-            },
-            "sentiment_score": 0.0,  # Placeholder, update after sentiment analysis
-        }
-        for tweet in tweets
-    ]
-
-    if existing_document:
-        # Append new tweets to existing `twitter_data`
-        capstone_collection.update_one(
-            {"_id": existing_document["_id"]},
-            {"$push": {"data.twitter_data": {"$each": formatted_tweets}}}
-        )
-        return {"message": "Tweets added to existing mock data", "id": str(existing_document["_id"])}
-    else:
-        # Insert a new document with the tweets
-        new_document = {
-            "data": {
-                "is_mock": True,
-                "active_markets": 0,
-                "mock_tweets": len(formatted_tweets),
-                "crypto_data": [],
-                "twitter_data": formatted_tweets
-            }
-        }
-        result = capstone_collection.insert_one(new_document)
-        return {"message": "New document created with tweets", "id": str(result.inserted_id)}

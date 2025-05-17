@@ -142,72 +142,51 @@ def detect_crypto_in_text(text):
             detected.add(coin)
     return list(detected)
 
-def fetch_user_tweets(start_date, end_date, coins, tweets_data):
+def fetch_user_tweets(start_date, end_date, tweets_data):
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
 
     if start_date == end_date:
         end_date += timedelta(days=1)
 
-    # Normalize coin names to lowercase
-    coin_names = [coin.lower() for coin in coins]
-
+    # query DB if tweets_data not passed
     if not tweets_data:
-
-    # Query only by date range
         query = {
             "tweet.date": {"$gte": start_date, "$lte": end_date}
         }
-
         cursor = crypto_tweet_repo.find_tweets(query)
         df = pd.DataFrame(list(cursor))
     else:
-        print("related: ", len(tweets_data['related_tweets']))
         df = pd.DataFrame(list(tweets_data['related_tweets']))
 
     if df.empty:
         return {"related_tweets": []}
 
-    # Match rows where any name in coins.names matches one of the selected coins
-    df["matched"] = df["coins"].apply(
-        lambda x: any(name in coin_names for name in x.get("names", []))
-        if isinstance(x, dict) else False
-    )
-
-    df = df[df["matched"]]
-
-    if df.empty:
-        return {"related_tweets": []}
-
-    # Extract relevant fields
+    # Extract required fields
     df["tweet_date"] = df["tweet"].apply(lambda x: x.get("date") if isinstance(x, dict) else None)
     df["tweet_content"] = df["tweet"].apply(lambda x: x.get("content") if isinstance(x, dict) else None)
     df["user_name"] = df["user"].apply(lambda x: x.get("name") if isinstance(x, dict) else None)
     df["user_followers"] = df["user"].apply(lambda x: x.get("followers") if isinstance(x, dict) else None)
     df["user_location"] = df["user"].apply(lambda x: x.get("location") if isinstance(x, dict) else None)
-    df['symbols'] = df['coins'].apply(lambda x: x.get('symbols', {}))
-
-
-    df["price"] = df.apply(
-        lambda row: row["coins"].get("price_data", {}).get(row["coins"].get("symbols", [None])[0], {}).get("price", 0)
-        if isinstance(row["coins"], dict) else 0,
-        axis=1
+    
+    # Directly extract the symbols from the coins object
+    df["symbols"] = df["coins"].apply(
+        lambda x: x.get("symbols", []) if isinstance(x, dict) else []
     )
 
-    # Deduplicate using composite key
+    # Deduplicate tweets by unique content+user+timestamp
     df["dedup_key"] = df.apply(
         lambda row: f"{row['tweet_content']}-{row['user_name']}-{row['tweet_date']}", axis=1
     )
     df = df.drop_duplicates(subset="dedup_key")
 
-    # Format final output
+    # Final structure
     final_tweets = df[[
         "tweet_date",
         "tweet_content",
         "user_name",
         "user_followers",
         "user_location",
-        "price",
         "symbols"
     ]].to_dict(orient="records")
 
