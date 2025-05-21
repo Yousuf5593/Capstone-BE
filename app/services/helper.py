@@ -1,4 +1,8 @@
 from collections import defaultdict
+import json
+
+with open("coins_mapping.json", "r", encoding="utf-8") as f:
+    crypto_dict = json.load(f)
 
 def compare_coin_mentions(range1, range2, popularity_filter="sentiment_count"):
     map1 = {coin['crypto']: coin for coin in range1}
@@ -26,29 +30,18 @@ def get_prices_avg(df_filtered):
     market_caps = defaultdict(list)
     coins_prices = defaultdict(list)
     for _, row in df_filtered.iterrows():
-        detected_coin = row["crypto"]
-        coins_obj = row.get("coins", {})
+        detected_coins = row["crypto"]
         price_data = row.get("coins", {}).get("price_data", {})
         if isinstance(price_data, dict):
-            symbols = coins_obj.get("symbols", [])
-            for symbol in symbols:
+            for coin in detected_coins:
+                symbol = crypto_dict[coin][0]
                 coin_price_data = price_data.get(symbol, {})
                 if isinstance(coin_price_data, dict):
                     market_cap = coin_price_data.get("market_cap")
                     coin_price = coin_price_data.get("price")
-                    if isinstance(market_cap, (int, float)):
-                        market_caps[detected_coin].append(market_cap)
-                        coins_prices[detected_coin].append(coin_price)
+                    if isinstance(coin_price, (int, float)):
+                            market_caps[coin] = market_cap
+                            coins_prices[coin] = coin_price
     
     
-    avg_market_caps = {
-            coin: (sum(values) / len(values)) if values!=0 else 0
-            for coin, values in market_caps.items()
-        }
-    
-    avg_coins_prices = {
-            coin: (sum(values) / len(values)) if values!=0 else 0
-            for coin, values in coins_prices.items()
-        }
-    
-    return avg_market_caps, avg_coins_prices
+    return market_caps, coins_prices

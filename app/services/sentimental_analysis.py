@@ -7,6 +7,7 @@ from datetime import timedelta
 from .helper import get_prices_avg
 from app.models import crypto_tweet_repo
 
+detected_coins = set()
 
 analyzer = SentimentIntensityAnalyzer()
 # Load the dataset
@@ -16,12 +17,15 @@ with open("coins_mapping.json", "r", encoding="utf-8") as f:
 def detect_crypto(hashtags):
     if not isinstance(hashtags, list):
         return None
-
+    matched = set()
     # Loop through the crypto_dict to check for matches
     for coin, keywords in crypto_dict.items():
-        if any(keyword.lower() in [hashtag.lower() for hashtag in hashtags] for keyword in keywords):
-            return coin
-    return None
+        for hashtag in hashtags:
+            if hashtag.lower() in keywords:
+                matched.add(coin)
+
+    return list(matched)
+
 
 def get_sentiment_score(text):
     sentiment = analyzer.polarity_scores(text)
@@ -97,8 +101,9 @@ def process_coins_sentiment_analysis(start_date, end_date):
 
     df_filtered["sentiment_score"] = df_filtered["tweet_content"].apply(get_sentiment_score)
     df_filtered["sentiment"] = df_filtered["sentiment_score"].apply(categorize_sentiment)
+    df_exploded = df_filtered.explode("crypto")
     # Aggregate sentiment by crypto
-    sentiment_summary = df_filtered.groupby(["crypto"]).agg(
+    sentiment_summary = df_exploded.groupby("crypto").agg(
         avg_sentiment_score=("sentiment_score", "mean"),
         sentiment_count=("sentiment", "count"),
         positive_count=("sentiment", lambda x: (x == "Bullish").sum()),
@@ -108,12 +113,24 @@ def process_coins_sentiment_analysis(start_date, end_date):
 
     # Determine final sentiment classification for each crypto
     sentiment_summary["final_sentiment"] = sentiment_summary.apply(hybrid_sentiment_classification, axis=1)
-    sentiment_summary["avg_market_cap"] = sentiment_summary["crypto"].apply(lambda x: avg_market_caps.get(x, 0))
-    sentiment_summary["avg_coins_prices"] = sentiment_summary["crypto"].apply(lambda x: avg_coins_prices.get(x, 0))
+    sentiment_summary["avg_coins_prices"] = sentiment_summary["crypto"].apply(
+    lambda coin: avg_coins_prices.get(coin, 0)
+)
+
+    sentiment_summary["avg_market_cap"] = sentiment_summary["crypto"].apply(
+        lambda coin: avg_market_caps.get(coin, 0)
+    )
+
+    sentiment_summary = sentiment_summary[
+        (sentiment_summary["avg_coins_prices"] != 0.0) & 
+        (sentiment_summary["avg_market_cap"] != 0.0)
+    ].reset_index(drop=True)
+
     response = {
         "sentiment_summary": sentiment_summary.to_dict(orient="records"),
     }
     return response
+    # return []
 
 
 def get_sentiment_summary_for_range(date_range, popularity_filter="sentiment_count"):
@@ -165,6 +182,7 @@ def get_sentiment_summary_for_range(date_range, popularity_filter="sentiment_cou
     grouped["avg_coins_prices"] = grouped["crypto"].apply(lambda x: avg_coins_prices.get(x, 0))
 
     return grouped.to_dict(orient="records")
+
 
 
 def process_tweet_data():
