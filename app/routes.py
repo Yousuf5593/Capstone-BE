@@ -90,10 +90,9 @@ def compare_sentiment():
 
     date_range1 = request.args.get("date_range1")
     date_range2 = request.args.get("date_range2")
-    popularity_filter =  request.args.get("popularity_filter", "sentiment_count")
         
-    range1_summary = get_sentiment_summary_for_range(date_range1, popularity_filter)
-    range2_summary = get_sentiment_summary_for_range(date_range2, popularity_filter)
+    range1_summary = get_sentiment_summary_for_range(date_range1)
+    range2_summary = get_sentiment_summary_for_range(date_range2)
 
     range1_enhanced, range2_enhanced = compare_coin_mentions(range1_summary, range2_summary)
 
